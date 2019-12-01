@@ -18,10 +18,10 @@ class Trainer():
 		
 	def prepare_datasets(self, inputs, targets, test_size = 0.2):
 		(train_inputs, val_inputs,
-		 train_targets, val_targets) = train_test_split(inputs, targets, test_size=test_size, shuffle = False)
+		 train_targets, val_targets) = train_test_split(inputs, targets, test_size = test_size, shuffle = False) # don't shuffle when using stateful GRU!
 		
 		self.train_size = len(train_inputs) - len(train_inputs) % self.batch_size
-		train_data = tf.data.Dataset.from_tensor_slices((train_inputs, train_targets)) # set shuffle = false
+		train_data = tf.data.Dataset.from_tensor_slices((train_inputs, train_targets))
 		train_data = train_data.batch(self.batch_size, drop_remainder=True)
 		
 		self.val_size = len(val_inputs) - len(val_inputs) % self.batch_size
@@ -32,7 +32,7 @@ class Trainer():
 		self.val_data = val_data
 		
 		
-	def train_model(self, num_epochs):
+	def train_model(self, num_epochs = 10):
 		num_train_batches = self.train_size//self.batch_size
 		num_val_batches = self.val_size//self.batch_size
 		
@@ -42,7 +42,7 @@ class Trainer():
 			val_accuracy = 0
 			self.model.reset_encoder_hidden_states()
 			for inputs, targets in self.val_data.take(num_val_batches):
-				batch_loss, batch_accuracy = self.model.evaluate(inputs, targets)
+				batch_loss, batch_accuracy = self.model.evaluate(inputs, targets, training = False)
 				val_loss += batch_loss / targets.shape[1]
 				val_accuracy += batch_accuracy
 			val_loss /= num_val_batches
@@ -53,16 +53,17 @@ class Trainer():
 			train_accuracy = 0
 			self.model.reset_encoder_hidden_states()
 			for (batch, (inputs, targets)) in enumerate(self.train_data.take(num_train_batches)):
+				self.model.reset_dropout_masks()
 				batch_loss, batch_accuracy = self.model.train_step(inputs, targets)
 				train_loss += batch_loss / targets.shape[1]
 				train_accuracy += batch_accuracy
 				
-				if batch % 100 == 0:
-					print('\tBatch {} Loss: {:.4f}'.format(batch, batch_loss / targets.shape[1]))
+				if (batch + 1) == 1 or (batch + 1) % 5 == 0:
+					print('\tBatch {} Loss: {:.4f}'.format(batch + 1, batch_loss / targets.shape[1]))
 			train_loss /= num_train_batches
 			train_accuracy /= num_train_batches
 			
-			# saving (checkpoint) the model every 2 epochs
+			# saving the model every 2 epochs
 			if (epoch + 1) % 2 == 0:
 				self.checkpoint.save(file_prefix = self.checkpoint_prefix)
 
